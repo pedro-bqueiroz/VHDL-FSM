@@ -4,10 +4,10 @@ use ieee.numeric_std.all;
 
 entity my_fsm is
   port (
-    Clk, Timeout, Reset, Alterna_display, Seleciona_moeda, Seleciona_produto : in std_logic;
-    Vp, Total                                                                : in std_logic_vector(2 downto 0);
-    clock5seg                                                                : in std_logic;
-    Valida_moeda                                                             : in boolean
+    Clk, Reset, Alterna_display, Seleciona_moeda, Seleciona_produto : in std_logic;
+    Vp, Total                                                       : in std_logic_vector(2 downto 0);
+    Timeout, clock5seg                                              : in std_logic;
+    Valida_moeda                                                    : in boolean
   );
 end my_fsm;
 
@@ -18,9 +18,6 @@ architecture fsm of my_fsm is
     Entrega_produto);
 
   signal ps, ns : state_type;
-  signal x      : std_logic;
-
-  signal b : std_logic := '0';
 
 begin
 
@@ -31,7 +28,7 @@ begin
     end if;
   end process sync_proc;
 
-  comb_proc : process (PS)
+  comb_proc : process (all)
   begin
     case PS is
       when Inicio =>
@@ -67,6 +64,8 @@ begin
       when Moeda_valida =>
         if (Seleciona_moeda = '1' and Total < Vp) then
           NS <= Moeda_valida;
+        elsif (Seleciona_moeda = '0' and Total < Vp) then
+          NS <= Espera_moeda;
         elsif (Total >= Vp) then
           NS <= Entrega_produto;
         end if;
