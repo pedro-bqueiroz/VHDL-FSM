@@ -80,6 +80,32 @@ begin
     Valida_moeda <= TRUE;
     wait until rising_edge(Clk); -- TESTANDO TRANSIÇÃO PARA MOEDA_VALIDA
 
+    Seleciona_moeda <= '0';
+    wait until rising_edge(Clk); -- TESTANDO TRANSIÇÃO PARA ESPERA_MOEDA
+
+    Seleciona_moeda <= '1';
+    wait until rising_edge(Clk);
+
+    Valida_moeda <= TRUE;
+    wait until rising_edge(Clk);
+
+    Seleciona_moeda <= '1';
+    wait until rising_edge(Clk); -- VERIFICANDO 0 < 2
+
+    Seleciona_moeda <= '1';
+    Total <= "110";
+    wait until rising_edge(Clk); -- TESTANDO TRANSIÇÃO PARA ENTREGA_PRODUTO
+
+
+    Timeout <= '1';
+    clock5seg <= '0';
+    wait until rising_edge(Clk); -- TESTANDO TRANSIÇÃO PARA ENTREGA_PRODUTO
+
+    Timeout <= '1';
+    clock5seg <= '1';
+    wait until rising_edge(Clk); -- TESTANDO TRANSIÇÃO PARA INICIO
+
+
     wait;
 
   end process;
