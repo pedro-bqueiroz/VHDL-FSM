@@ -6,9 +6,10 @@ entity fsm2 is
   port (
     clk               : in std_logic;
     Reset             : in std_logic;
-    Alterna_display   : in std_logic;
-    Seleciona_moeda   : in std_logic;
-    Seleciona_produto : in std_logic;
+    SEL_D   : in std_logic;
+    SEL_M   : in std_logic;
+    SEL_P : in std_logic;
+    LD_S : in std_logic;
     Vp                : in unsigned(2 downto 0);
     Total             : in unsigned(2 downto 0);
     Timeout           : in unsigned(2 downto 0);
@@ -28,7 +29,7 @@ use ieee.numeric_std.all;
 
 entity somador is
   port (
-    x, y : in std_logic_vector(7 downto 0);
+    a, b : in std_logic_vector(7 downto 0);
     s    : out std_logic_vector(7 downto 0));
 end somador;
 
@@ -38,9 +39,8 @@ use ieee.numeric_std.all;
 
 entity coin_detector is
   port (
-    c : in std_logic_vector(2 downto 0);
-    d : out std_logic;
-    v : out std_logic_vector(7 downto 0));
+    moeda : in std_logic_vector(2 downto 0);
+    moe : out std_logic_vector(7 downto 0));
 end coin_detector;
 
 library ieee;
@@ -94,6 +94,19 @@ entity registrador is
 
 end entity;
 
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity timer5seg is
+  port (
+    Clock         : in std_logic;
+    Clear         : in std_logic;
+    Dispara_timer : in std_logic;
+    Timeout       : out std_logic
+  );
+end timer5seg;
+
 -- Divisor de clock com entrada de 50MHz e saída de 1Hz
 library ieee;
 use ieee.std_logic_1164.all;
@@ -115,7 +128,52 @@ architecture fsm of fsm2 is
 
   signal ps, ns : state_type;
 
+  signal moereg : STD_LOGIC_VECTOR(7 downto 0);
+  signal SOMADOR_A, SOMADOR_B, SOMADOR_C : STD_LOGIC_VECTOR(7 DOWNTO 0);
+  signal s, ent, LED : STD_LOGIC_VECTOR(7 downto 0);
+
 begin
+
+  CP : entity work.comparador
+  port map (
+    Vp => SOMADOR_C,
+    Total => SOMADOR_B,
+    Total_maior_ou_igual_Vp => Entrega
+  );
+
+  REG_P : entity work.registrador
+  port map (
+    Reset => Reset,
+    Load => SEL_P,
+    Clock => clk,
+    Ent => LED,
+    Sai => SOMADOR_C
+  );
+
+  REG_M : entity work.registrador
+  port map (
+    Reset => Reset,
+    Load => SEL_M,
+    Clock => clk,
+    Ent => moereg,
+    Sai => SOMADOR_A
+  );
+
+  REG_S : entity work.registrador
+  port map (
+    Reset => Reset,
+    Load => LD_S,
+    Clock => clk,
+    Ent => s,
+    Sai => SOMADOR_B
+  );
+
+  SOMADOR : entity work.somador
+  port map(
+    a => SOMADOR_A,
+    b => SOMADOR_B,
+    s => Ent
+  );
 
   sync_proc : process (CLK) -- note: no NS here!
   begin -- state reset and transition
@@ -124,7 +182,7 @@ begin
     end if;
   end process sync_proc;
 
-  comb_proc : process (all)
+  comb_proc : process (Reset, SEL_P, SEL_M, SEL_D, Valida_moeda, Total, Vp, Timeout)
   begin
     case PS is
       when Inicio =>
@@ -135,18 +193,18 @@ begin
         end if;
 
       when Espera_produto =>
-        if (Seleciona_produto = '1') then
+        if (SEL_P = '1') then
           ns <= Espera_moeda;
         else
           ns <= Espera_produto;
         end if;
 
       when Espera_moeda =>
-        if (Seleciona_moeda = '1') then
+        if (SEL_M = '1') then
           NS <= Espera_outra;
-        elsif (not Seleciona_moeda = '1' and not Alterna_display = '1') then
+        elsif (not SEL_M = '1' and not SEL_D = '1') then
           NS <= Espera_moeda;
-        elsif (not Seleciona_moeda = '1' and Alterna_display = '1') then
+        elsif (not SEL_M = '1' and SEL_D = '1') then
           NS <= Espera_moeda;
         end if;
 
@@ -158,18 +216,18 @@ begin
         end if;
 
       when Moeda_valida =>
-        if (Seleciona_moeda = '1' and Total < Vp) then
+        if (SEL_M = '1' and Total < Vp) then
           NS <= Moeda_valida;
-        elsif (Seleciona_moeda = '0' and Total < Vp) then
+        elsif (SEL_M = '0' and Total < Vp) then
           NS <= Espera_moeda;
         elsif (Total >= Vp) then
           NS <= Entrega_produto;
         end if;
 
       when Entrega_produto =>
-        if (Timeout < clock5seg) then
+        if (Timeout = 0) then
           NS <= Entrega_produto;
-        elsif (Timeout = clock5seg) then
+        else
           NS <= Inicio;
         end if;
 
@@ -179,34 +237,29 @@ end fsm;
 
 architecture comportamental of somador is
 begin
-  s <= std_logic_vector(unsigned(x) + unsigned(y));
+  s <= std_logic_vector(unsigned(a) + unsigned(b));
 end comportamental;
 
 architecture comportamental of coin_detector is
 begin
 
-  d <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
-    '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
-    '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
-    '0';
-
-  v(7) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '0') else
+  moe(7) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '0') else
   '0';
-  v(6) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+  moe(6) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
   '0';
-  v(5) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
-  '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+  moe(5) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
+  '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
   '0';
-  v(4) <= '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
-  '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  moe(4) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
+  '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
   '0';
-  v(3) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  moe(3) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
   '0';
-  v(2) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+  moe(2) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
   '0';
-  v(1) <= '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+  moe(1) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
   '0';
-  v(0) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  moe(0) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
   '0';
 end comportamental;
 
@@ -362,19 +415,6 @@ begin
     clk1Hz <= b;
   end process;
 end;
-
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
-
-entity timer5seg is
-  port (
-    Clock         : in std_logic;
-    Clear         : in std_logic;
-    Dispara_timer : in std_logic;
-    Timeout       : out std_logic
-  );
-end timer5seg;
 
 architecture Behavioral of timer5seg is
   signal clk_1Hz  : std_logic;
