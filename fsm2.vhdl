@@ -2,33 +2,217 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity my_fsm is
+entity fsm2 is
   port (
-    Clk, Timeout, Reset, Alterna_display, Seleciona_moeda, Seleciona_produto : in std_logic;
-    Vp, Total, Display                                                    : in std_logic_vector(2 downto 0);
-    Valida_moeda                                                          : in boolean
-    /*
+    clk               : in std_logic;
+    Reset             : in std_logic;
+    Alterna_display   : in std_logic;
+    Seleciona_moeda   : in std_logic;
+    Seleciona_produto : in std_logic;
+    Vp                : in unsigned(2 downto 0);
+    Total             : in unsigned(2 downto 0);
+    Timeout           : in unsigned(2 downto 0);
+    Valida_moeda      : in boolean;
+    ini               : out std_logic;
+    prod              : out std_logic;
+    moeda             : out std_logic;
+    espera            : out std_logic;
+    valida            : out std_logic;
+    entrega           : out std_logic
+  );
+end fsm2;
 
-    Clk1 : in std_logic;
-    HEX0                                                                  : out std_logic_vector(7 downto 0);
-    HEX1                                                                  : out std_logic_vector(7 downto 0);
-    HEX2                                                                  : out std_logic_vector(7 downto 0);
-    HEX3                                                                  : out std_logic_vector(7 downto 0);
-    HEX4                                                                  : out std_logic_vector(7 downto 0);
-    HEX5                                                                  : out std_logic_vector(7 downto 0);
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
+entity somador is
+  port (
+    x, y : in std_logic_vector(7 downto 0);
+    s    : out std_logic_vector(7 downto 0));
+end somador;
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity coin_detector is
+  port (
+    c : in std_logic_vector(2 downto 0);
+    d : out std_logic;
+    v : out std_logic_vector(7 downto 0));
+end coin_detector;
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity product_detector_ROM is
+  port (
     SW      : in std_logic;
     produto : in std_logic_vector(2 downto 0);
     LED     : out std_logic_vector(7 downto 0);
-
-    clk50MHz : in std_logic;
-    clk1Hz   : out std_logic
-    */
+    HEX0    : out std_logic_vector(7 downto 0);
+    HEX1    : out std_logic_vector(7 downto 0);
+    HEX2    : out std_logic_vector(7 downto 0);
+    HEX3    : out std_logic_vector(7 downto 0);
+    HEX4    : out std_logic_vector(7 downto 0);
+    HEX5    : out std_logic_vector(7 downto 0)
   );
-end my_fsm;
+end entity;
 
-architecture fsm of my_fsm is
-  /* constant NADA : std_logic_vector(7 downto 0) := x"FF";
+library IEEE;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity comparador is
+  port (
+    Total                   : in std_logic_vector(7 downto 0); -- apenas para esse arquivo
+    Vp                      : in std_logic_vector(7 downto 0);
+    Total_maior_ou_igual_Vp : out std_logic;
+    Total_menor_que_Vp      : out std_logic
+  );
+end comparador;
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity registrador is
+  generic (
+    N : integer := 8
+  );
+
+  port (
+    Reset : in std_logic;
+    Load  : in std_logic;
+    Clock : in std_logic;
+    Ent   : in std_logic_vector(N - 1 downto 0);
+
+    Sai : out std_logic_vector(N - 1 downto 0)
+  );
+
+end entity;
+
+-- Divisor de clock com entrada de 50MHz e saída de 1Hz
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity DivisorClock is
+  port (
+    clk50MHz : in std_logic;
+    reset    : in std_logic;
+    clk1Hz   : out std_logic
+  );
+end DivisorClock;
+
+architecture fsm of fsm2 is
+
+  type state_type is (Inicio, Espera_produto,
+    Espera_moeda, Espera_outra, Moeda_valida,
+    Entrega_produto);
+
+  signal ps, ns : state_type;
+
+begin
+
+  sync_proc : process (CLK) -- note: no NS here!
+  begin -- state reset and transition
+    if (rising_edge(CLK)) then
+      PS <= NS;
+    end if;
+  end process sync_proc;
+
+  comb_proc : process (all)
+  begin
+    case PS is
+      when Inicio =>
+        if (Reset = '1') then
+          Ns <= Espera_produto;
+        else
+          Ns <= Inicio;
+        end if;
+
+      when Espera_produto =>
+        if (Seleciona_produto = '1') then
+          ns <= Espera_moeda;
+        else
+          ns <= Espera_produto;
+        end if;
+
+      when Espera_moeda =>
+        if (Seleciona_moeda = '1') then
+          NS <= Espera_outra;
+        elsif (not Seleciona_moeda = '1' and not Alterna_display = '1') then
+          NS <= Espera_moeda;
+        elsif (not Seleciona_moeda = '1' and Alterna_display = '1') then
+          NS <= Espera_moeda;
+        end if;
+
+      when Espera_outra =>
+        if not Valida_moeda then
+          NS <= Espera_moeda;
+        else
+          NS <= Moeda_valida;
+        end if;
+
+      when Moeda_valida =>
+        if (Seleciona_moeda = '1' and Total < Vp) then
+          NS <= Moeda_valida;
+        elsif (Seleciona_moeda = '0' and Total < Vp) then
+          NS <= Espera_moeda;
+        elsif (Total >= Vp) then
+          NS <= Entrega_produto;
+        end if;
+
+      when Entrega_produto =>
+        if (Timeout < clock5seg) then
+          NS <= Entrega_produto;
+        elsif (Timeout = clock5seg) then
+          NS <= Inicio;
+        end if;
+
+    end case;
+  end process comb_proc;
+end fsm;
+
+architecture comportamental of somador is
+begin
+  s <= std_logic_vector(unsigned(x) + unsigned(y));
+end comportamental;
+
+architecture comportamental of coin_detector is
+begin
+
+  d <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+    '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+    '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+    '0';
+
+  v(7) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '0') else
+  '0';
+  v(6) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+  '0';
+  v(5) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+  '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+  '0';
+  v(4) <= '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+  '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  '0';
+  v(3) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  '0';
+  v(2) <= '1' when (c(2) = '1' and c(1) = '0' and c(0) = '0') else
+  '0';
+  v(1) <= '1' when (c(2) = '0' and c(1) = '1' and c(0) = '0') else
+  '0';
+  v(0) <= '1' when (c(2) = '0' and c(1) = '0' and c(0) = '1') else
+  '0';
+end comportamental;
+
+architecture rtl of product_detector_ROM is
+
+  constant NADA : std_logic_vector(7 downto 0) := x"FF";
 
   constant D0 : std_logic_vector(7 downto 0) := x"C0";
   constant D1 : std_logic_vector(7 downto 0) := x"F9";
@@ -43,7 +227,7 @@ architecture fsm of my_fsm is
   constant F : std_logic_vector(7 downto 0) := x"8E";
   constant H : std_logic_vector(7 downto 0) := x"89";
   constant I : std_logic_vector(7 downto 0) := x"CF";
-  constant L : std_logic_vector(7 downto 0) := x"47";
+  constant L : std_logic_vector(7 downto 0) := x"C7";
   constant N : std_logic_vector(7 downto 0) := x"AB";
   constant O : std_logic_vector(7 downto 0) := x"C0";
   constant P : std_logic_vector(7 downto 0) := x"8C";
@@ -52,76 +236,117 @@ architecture fsm of my_fsm is
   constant T : std_logic_vector(7 downto 0) := x"87";
   constant U : std_logic_vector(7 downto 0) := x"C1";
 
-  */
-
-  type state_type is (Inicio, Espera_produto,
-    Espera_moeda, Espera_outra, Moeda_valida,
-    Entrega_produto);
-
-  signal ps, ns : state_type;
-  signal x      : std_logic;
-
-  /* type memory is array (0 to 7) of std_logic_vector(103 downto 0);
+  type memory is array (0 to 7) of std_logic_vector(95 downto 0);
 
   constant ROM : memory := (
   0 =>
   N & O & NADA & NADA & NADA & NADA &
-  NADA & NADA & NADA & NADA & NADA & D0 &
-  "00000000",
+  NADA & NADA & NADA & NADA & NADA & D0,
 
   1 =>
   C & R & I & S & P & S &
-  NADA & NADA & NADA & NADA & D7 & D5 &
-  "01001011",
+  NADA & NADA & NADA & NADA & D7 & D5,
 
   2 =>
   P & E & A & N & U & T &
-  NADA & NADA & NADA & NADA & D5 & D0 &
-  "00110010",
+  NADA & NADA & NADA & NADA & D5 & D0,
 
   3 =>
   C & O & F & F & E & E &
-  NADA & NADA & NADA & D1 & D0 & D0 &
-  "01100100",
+  NADA & NADA & NADA & D1 & D0 & D0,
 
   4 =>
   A & P & P & L & E & S &
-  NADA & NADA & NADA & D1 & D7 & D5 &
-  "10101111",
+  NADA & NADA & NADA & D1 & D7 & D5,
 
   5 =>
   S & O & D & A & NADA & NADA &
-  NADA & NADA & NADA & D1 & D5 & D0 &
-  "10010110",
+  NADA & NADA & NADA & D1 & D5 & D0,
 
   6 =>
   C & H & I & P & S & NADA &
-  NADA & NADA & NADA & D1 & D2 & D5 &
-  "01111101",
+  NADA & NADA & NADA & D1 & D2 & D5,
 
   7 =>
   NADA & NADA & NADA & NADA & NADA & NADA &
-  NADA & NADA & NADA & NADA & NADA & NADA &
-  "00000000"
+  NADA & NADA & NADA & NADA & NADA & NADA
   );
-  */
 
-  /* 
-  signal saida_produto   : std_logic_vector (103 downto 0);
-  signal seletor_produto : std_logic_vector (2 downto 0);
-  signal modo            : std_logic;
-  signal address : integer range 0 to 7;
-  signal contador        : integer range 0 to 4 := 0;
-  signal b : std_logic := '0';
-
-  
-  signal Timeout         : std_logic;
-  */
+  signal product       : std_logic_vector(2 downto 0);
+  signal saida_produto : std_logic_vector(95 downto 0);
+  signal SEL_D         : std_logic := '0';
+  signal address       : integer range 0 to 7;
 begin
 
-  /* Geração do Clock. Para um clock de 50MHz esse process gera um sinal de clock de 0,2Hz.
+  product <= produto;
+
+  address <= to_integer(unsigned(produto));
+
+  saida_produto <= ROM(address);
+
+  SEL_D <= SW;
+
+  process (SEL_D, saida_produto)
+
+  begin
+    if SEL_D = '0' then
+      HEX5 <= saida_produto(95 downto 88);
+      HEX4 <= saida_produto(87 downto 80);
+      HEX3 <= saida_produto(79 downto 72);
+      HEX2 <= saida_produto(71 downto 64);
+      HEX1 <= saida_produto(63 downto 56);
+      HEX0 <= saida_produto(55 downto 48);
+    else
+      HEX5 <= saida_produto(47 downto 40);
+      HEX4 <= saida_produto(39 downto 32);
+      HEX3 <= saida_produto(31 downto 24);
+      HEX2 <= saida_produto(23 downto 16);
+      HEX1 <= saida_produto(15 downto 8);
+      HEX0 <= saida_produto(7 downto 0);
+
+    end if;
+  end process;
+end architecture;
+
+architecture padrao of comparador is
+begin
+  k : process (Total, Vp) is
+  begin
+    if (unsigned(Vp)        <= unsigned(Total)) then
+      Total_maior_ou_igual_Vp <= '1';
+      Total_menor_que_Vp      <= '0';
+    else
+      Total_menor_que_Vp      <= '1';
+      Total_maior_ou_igual_Vp <= '0';
+    end if;
+  end process;
+end architecture padrao;
+
+architecture registra of registrador is
+
+begin
+  reg : process (Clock, Reset)
+
+  begin
+    if (Reset = '1') then
+      Sai <= (others => '0');
+    elsif (rising_edge(Clock)) then
+      if (Load = '1') then
+        Sai <= Ent;
+      end if;
+    end if;
+
+  end process;
+end architecture;
+architecture Behavioral of DivisorClock is
+
+  --signal count : integer := 0;
+  signal b : std_logic := '0';
+begin
+
+  -- Geração do Clock. Para um clock de 50MHz esse process gera um sinal de clock de 1Hz.
   process (clk50MHz, b)
-    variable cnt : integer range 0 to 2 ** 27 - 1;
+    variable cnt : integer range 0 to 2 ** 26 - 1;
   begin
     if (rising_edge(clk50MHz)) then
       if (reset = '1') then
@@ -129,145 +354,97 @@ begin
       else
         cnt := cnt + 1;
       end if;
-      if (cnt = 124999999) then
+      if (cnt = 24999999) then
         b <= not b;
         cnt := 0;
       end if;
     end if;
     clk1Hz <= b;
   end process;
-  
+end;
 
-  saida_produto <= produto;
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
-  address <= to_integer(unsigned(produto));
+entity timer5seg is
+  port (
+    Clock         : in std_logic;
+    Clear         : in std_logic;
+    Dispara_timer : in std_logic;
+    Timeout       : out std_logic
+  );
+end timer5seg;
 
-  saida_produto <= ROM(address);
+architecture Behavioral of timer5seg is
+  signal clk_1Hz  : std_logic;
+  signal contador : integer range 0 to 4 := 0;
+begin
 
-  modo <= SW;
+  U_DIVISOR : entity work.DivisorClock
+    port map
+    (
+      clk50MHz => Clock,
+      reset    => Clear,
+      clk1Hz   => clk_1Hz
+    );
 
-  process(modo, saida_produto)
-
+  process (clk_1Hz, Clear)
   begin
-      if modo = '0' then
-          HEX5 <= saida_produto(103 downto 96);
-          HEX4 <= saida_produto(95 downto 88);
-          HEX3 <= saida_produto(87 downto 80);
-          HEX2 <= saida_produto(79 downto 72);
-          HEX1 <= saida_produto(71 downto 64);
-          HEX0 <= saida_produto(63 downto 56);
+    if Clear = '1' then
+      contador <= 0;
+      Timeout  <= '0';
+
+    elsif rising_edge(clk_1Hz) then
+      Timeout <= '0';
+
+      if Dispara_timer = '1' then
+        if contador = 4 then
+          contador <= 0;
+          Timeout  <= '1';
+        else
+          contador <= contador + 1;
+        end if;
       else
-          HEX5 <= saida_produto(55 downto 48);
-          HEX4 <= saida_produto(47 downto 40);
-          HEX3 <= saida_produto(39 downto 32);
-          HEX2 <= saida_produto(31 downto 24);
-          HEX1 <= saida_produto(23 downto 16);
-          HEX0 <= saida_produto(15 downto 8);
+        contador <= 0;
       end if;
+    end if;
   end process;
 
-  LED(7 downto 0) <= saida_produto(7 downto 0);
+end Behavioral;
 
-  */
+library ieee;
+use ieee.std_logic_1164.all;
 
-  sync_proc : process (CLK) -- note: no NS here!
-  begin -- state reset and transition
-    if (rising_edge(CLK)) then
-      PS <= NS;
-    end if;
-  end process sync_proc;
+entity clock5seg is
+  port (
+    Clock         : in std_logic;
+    Clear         : in std_logic;
+    Dispara_timer : in std_logic;
+    Timeout       : out std_logic
+  );
+end clock5seg;
 
-  comb_proc : process (PS)
-  begin
+architecture Behavioral of clock5seg is
 
-    /*
-    HEX0 <= NADA;
-    HEX1 <= NADA;
-    HEX2 <= NADA;
-    HEX3 <= NADA;
-    HEX4 <= NADA;
-    HEX5 <= NADA;
-    */
+  component timer5seg is
+    port (
+      Clock         : in std_logic;
+      Clear         : in std_logic;
+      Dispara_timer : in std_logic;
+      Timeout       : out std_logic
+    );
+  end component;
 
-    case PS is
-      when Inicio =>
-        if (Reset = '1') then
-          Ns <= Espera_produto;
-        else
-          Ns <= Inicio;
+begin
 
-          /*
-          HEX0 <= (others => '0');
-          HEX1 <= (others => '0');
-          HEX2 <= (others => '0');
-          HEX3 <= (others => '0');
-          HEX4 <= (others => '0');
-          HEX5 <= (others => '0');
-          */
+  U1 : timer5seg
+  port map
+  (
+    Clock         => Clock,
+    Clear         => Clear,
+    Dispara_timer => Dispara_timer,
+    Timeout       => Timeout
+  );
 
-        end if;
-
-      when Espera_produto =>
-        if (Seleciona_produto = '1') then
-          ns <= Espera_moeda;
-
-          -- CARREGA PRODUTO, CARREGA VP.
-        else
-          ns <= Espera_produto;
-
-          
-        end if;
-
-      when Espera_moeda =>
-        if (Seleciona_moeda) then
-          NS <= Espera_outra;
-        elsif (not Seleciona_moeda = '1' and not Alterna_display = '1') then
-          --DISPLAYS = PRODUTO
-          NS <= Espera_moeda;
-        elsif (not Seleciona_moeda = '1' and Alterna_display = '1') then
-          --Displays = Vp 
-          NS <= Espera_moeda;
-        end if;
-
-      when Espera_outra =>
-        if not Valida_moeda then
-          --LED_MOEDA_INVALIDA;     
-
-          NS <= Espera_moeda;
-
-        else
-          NS <= Moeda_valida;
-        end if;
-
-      when Moeda_valida =>
-        if (Seleciona_moeda = '1' and Total < Vp) then
-          NS <= Moeda_valida;
-          --Displays = Total;
-        elsif (Total >= Vp) then
-          NS <= Entrega_produto;
-          -- Led_entrega_produto 
-          -- Dispara timer
-
-        end if;
-
-      when Entrega_produto =>
-        if (true) then
-          NS             <= Entrega_produto;
-          /* if (Timeout <= x) then
-          NS             <= Entrega_produto;
-          -- Led_entrega_produto;
-        elsif (Timeout = x) then
-          NS <= Inicio;
-          -- NOT Led_entrega_produto
-          -- NOT dispara_timer
-
-        end if;
-        */
-
-      else
-        NS <= Inicio;
-    end if;
-
-  end case;
-end process comb_proc;
-end fsm;
+end Behavioral;
