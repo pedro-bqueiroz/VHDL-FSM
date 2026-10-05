@@ -2,81 +2,136 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity my_fsm is
+entity fsm is
   port (
-    Clk, Reset, Alterna_display, Seleciona_moeda, Seleciona_produto : in std_logic;
-    Vp, Total                                                       : in std_logic_vector(2 downto 0);
-    Timeout, clock5seg                                              : in std_logic;
-    Valida_moeda                                                    : in boolean
+    clk                 : in  std_logic;
+    Reset               : in  std_logic;
+    Alterna_display     : in  std_logic;
+    Seleciona_moeda     : in  std_logic;
+    Seleciona_produto   : in  std_logic;
+    Vp                  : in  unsigned(2 downto 0);
+    Total               : in  unsigned(2 downto 0);
+    Timeout             : in  unsigned(2 downto 0);
+    Valida_moeda        : in  boolean;
+    ini                 : out std_logic;
+    prod                : out std_logic;
+    moeda               : out std_logic;
+    espera              : out std_logic;
+    valida              : out std_logic;
+    entrega             : out std_logic
   );
-end my_fsm;
+end fsm;
 
-architecture fsm of my_fsm is
+architecture my_fsm of fsm is
 
-  type state_type is (Inicio, Espera_produto,
-    Espera_moeda, Espera_outra, Moeda_valida,
-    Entrega_produto);
+  type state_type is (
+    Inicio,
+    Espera_produto,
+    Espera_moeda,
+    Espera_outra,
+    Moeda_valida,
+    Entrega_produto
+  );
 
   signal ps, ns : state_type;
 
+  constant clock5seg : unsigned(2 downto 0) := "101";
+
 begin
 
-  sync_proc : process (CLK) -- note: no NS here!
-  begin -- state reset and transition
-    if (rising_edge(CLK)) then
-      PS <= NS;
-    end if;
-  end process sync_proc;
-
-  comb_proc : process (all)
+  state_register : process(clk)
   begin
-    case PS is
+    if rising_edge(clk) then
+      ps <= ns;
+    end if;
+  end process;
+
+  comb_proc : process(
+    ps,
+    reset,
+    Seleciona_moeda,
+    Seleciona_produto,
+    Alterna_display,
+    Valida_moeda,
+    Vp,
+    Total,
+    Timeout
+  )
+  begin
+
+    ns <= ps;
+
+    ini     <= '0';
+    prod    <= '0';
+    moeda   <= '0';
+    espera  <= '0';
+    valida  <= '0';
+    entrega <= '0';
+
+    case ps is
+
       when Inicio =>
-        if (Reset = '1') then
-          Ns <= Espera_produto;
+        ini <= '1';
+
+        if reset = '1' then
+          ns <= Espera_produto;
         else
-          Ns <= Inicio;
+          ns <= Inicio;
         end if;
 
       when Espera_produto =>
-        if (Seleciona_produto = '1') then
+        prod <= '1';
+
+        if Seleciona_produto = '1' then
           ns <= Espera_moeda;
         else
           ns <= Espera_produto;
         end if;
 
       when Espera_moeda =>
-        if (Seleciona_moeda = '1') then
-          NS <= Espera_outra;
-        elsif (not Seleciona_moeda = '1' and not Alterna_display = '1') then
-          NS <= Espera_moeda;
-        elsif (not Seleciona_moeda = '1' and Alterna_display = '1') then
-          NS <= Espera_moeda;
+        moeda <= '1';
+
+        if Seleciona_moeda = '1' then
+          ns <= Espera_outra;
+        elsif Alterna_display = '0' then
+          ns <= Espera_moeda;
+        else
+          ns <= Espera_moeda;
         end if;
 
       when Espera_outra =>
-        if not Valida_moeda then
-          NS <= Espera_moeda;
+        espera <= '1';
+
+        if Valida_moeda = true then
+          ns <= Moeda_valida;
         else
-          NS <= Moeda_valida;
+          ns <= Espera_moeda;
         end if;
 
       when Moeda_valida =>
-        if (Seleciona_moeda = '1' and Total < Vp) then
-          NS <= Moeda_valida;
-        elsif (Seleciona_moeda = '0' and Total < Vp) then
-          NS <= Espera_moeda;
-        elsif (Total >= Vp) then
-          NS <= Entrega_produto;
+        valida <= '1';
+
+        if (Seleciona_moeda = '1') and (Total < Vp) then
+          ns <= Moeda_valida;
+        elsif (Seleciona_moeda = '0') and (Total < Vp) then
+          ns <= Espera_moeda;
+        elsif Total >= Vp then
+          ns <= Entrega_produto;
+        else
+          ns <= Moeda_valida;
         end if;
 
       when Entrega_produto =>
-        if (Timeout < clock5seg) then
-          NS <= Entrega_produto;
-        elsif (Timeout = clock5seg) then
-          NS <= Inicio;
+        entrega <= '1';
+
+        if Timeout < clock5seg then
+          ns <= Entrega_produto;
+        else
+          ns <= Inicio;
         end if;
 
     end case;
-  end process comb_proc;
-end fsm;
+
+  end process;
+
+end my_fsm;
