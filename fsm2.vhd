@@ -4,22 +4,32 @@ use ieee.numeric_std.all;
 
 entity fsm2 is
   port (
-    clk               : in std_logic;
-    Reset             : in std_logic;
-    SEL_D   : in std_logic;
-    SEL_M   : in std_logic;
-    SEL_P : in std_logic;
-    LD_S : in std_logic;
-    Vp                : in unsigned(2 downto 0);
-    Total             : in unsigned(2 downto 0);
-    Timeout           : in std_logic;
-    Valida_moeda      : in boolean;
-    ini               : out std_logic;
-    prod              : out std_logic;
-    moeda             : out std_logic;
-    espera            : out std_logic;
-    valida            : out std_logic;
-    entrega           : out std_logic
+    clk          : in std_logic;
+    Reset        : in std_logic;
+    SEL_D        : in std_logic;
+    SEL_M        : in std_logic;
+    SEL_P        : in std_logic;
+    LD_S         : in std_logic;
+    Vp           : in unsigned(2 downto 0);
+    Total        : in unsigned(2 downto 0);
+    Timeout      : in std_logic;
+    Valida_moeda : in boolean;
+    SW           : in std_logic_vector(9 downto 0);
+
+    ini     : out std_logic;
+    prod    : out std_logic;
+    moeda   : out std_logic;
+    espera  : out std_logic;
+    valida  : out std_logic;
+    entrega : out std_logic;
+
+    -- Saídas para os displays de 7 segmentos da DE10-Lite
+    HEX0    : out std_logic_vector(7 downto 0);
+    HEX1    : out std_logic_vector(7 downto 0);
+    HEX2    : out std_logic_vector(7 downto 0);
+    HEX3    : out std_logic_vector(7 downto 0);
+    HEX4    : out std_logic_vector(7 downto 0);
+    HEX5    : out std_logic_vector(7 downto 0)
   );
 end fsm2;
 
@@ -40,7 +50,7 @@ use ieee.numeric_std.all;
 entity coin_detector is
   port (
     moeda : in std_logic_vector(2 downto 0);
-    moe : out std_logic_vector(7 downto 0));
+    moe   : out std_logic_vector(7 downto 0));
 end coin_detector;
 
 library ieee;
@@ -67,8 +77,8 @@ use ieee.numeric_std.all;
 
 entity comparador is
   port (
-    Total                   : in std_logic_vector(2 downto 0); -- apenas para esse arquivo
-    Vp                      : in std_logic_vector(2 downto 0);
+    Total                   : in std_logic_vector(7 downto 0);
+    Vp                      : in std_logic_vector(7 downto 0);
     Total_maior_ou_igual_Vp : out std_logic;
     Total_menor_que_Vp      : out std_logic
   );
@@ -107,7 +117,6 @@ entity timer5seg is
   );
 end timer5seg;
 
--- Divisor de clock com entrada de 50MHz e saída de 1Hz
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -128,61 +137,126 @@ architecture fsm of fsm2 is
 
   signal ps, ns : state_type;
 
-  signal moereg : STD_LOGIC_VECTOR(7 downto 0);
-  signal SOMADOR_A, SOMADOR_B, SOMADOR_C : STD_LOGIC_VECTOR(7 DOWNTO 0);
-  signal s, ent, LED : STD_LOGIC_VECTOR(7 downto 0);
+  signal moeda_sel                       : std_logic_vector(2 downto 0);
+  signal produto_sel                     : std_logic_vector(2 downto 0);
+  signal moereg                          : std_logic_vector(7 downto 0);
+  signal SOMADOR_A, SOMADOR_B, SOMADOR_C : std_logic_vector(7 downto 0);
+  signal s, ent, LED                     : std_logic_vector(7 downto 0);
+
+  signal ok : std_logic;
+
+  -- Sinais invertidos para adaptar o acionamento em nível baixo dos botões KEY0 e KEY1
+  signal sel_p_btn : std_logic;
+  signal sel_m_btn : std_logic;
 
 begin
 
+  -- Inversão para botões ativos em nível baixo (KEY0 e KEY1)
+  sel_p_btn <= not SEL_P;
+  sel_m_btn <= not SEL_M;
+
+  -- Seleção de entradas a partir dos switches
+  moeda_sel   <= SW(9 downto 7);
+  produto_sel <= SW(6 downto 4);
+
+  -- Instanciação da ROM para decodificar o produto e os Displays HEX
+  ROM_INST : entity work.product_detector_ROM
+    port map
+    (
+      SW      => SEL_D,
+      produto => produto_sel,
+      LED     => LED,
+      HEX0    => HEX0,
+      HEX1    => HEX1,
+      HEX2    => HEX2,
+      HEX3    => HEX3,
+      HEX4    => HEX4,
+      HEX5    => HEX5
+    );
+
   CP : entity work.comparador
-  port map (
-    Vp => SOMADOR_C,
-    Total => SOMADOR_B,
-    Total_maior_ou_igual_Vp => entrega
-  );
+    port map
+    (
+      Vp                      => SOMADOR_C,
+      Total                   => SOMADOR_B,
+      Total_maior_ou_igual_Vp => ok,
+      Total_menor_que_Vp      => open
+    );
 
   REG_P : entity work.registrador
-  port map (
-    Reset => Reset,
-    Load => SEL_P,
-    Clock => clk,
-    Ent => LED,
-    Sai => SOMADOR_C
-  );
+    port map
+    (
+      Reset => Reset,
+      Load  => sel_p_btn,
+      Clock => clk,
+      Ent   => LED,
+      Sai   => SOMADOR_C
+    );
 
   REG_M : entity work.registrador
-  port map (
-    Reset => Reset,
-    Load => SEL_M,
-    Clock => clk,
-    Ent => moereg,
-    Sai => SOMADOR_A
-  );
+    port map
+    (
+      Reset => Reset,
+      Load  => sel_m_btn,
+      Clock => clk,
+      Ent   => moereg,
+      Sai   => SOMADOR_A
+    );
 
   REG_S : entity work.registrador
-  port map (
-    Reset => Reset,
-    Load => LD_S,
-    Clock => clk,
-    Ent => s,
-    Sai => SOMADOR_B
-  );
+    port map
+    (
+      Reset => Reset,
+      Load  => LD_S,
+      Clock => clk,
+      Ent   => s,
+      Sai   => SOMADOR_B
+    );
 
   SOMADOR : entity work.somador
-  port map(
-    a => SOMADOR_A,
-    b => SOMADOR_B,
-    s => Ent
-  );
+    port map
+    (
+      a => SOMADOR_A,
+      b => SOMADOR_B,
+      s => Ent
+    );
 
-  sync_proc : process (CLK) -- note: no NS here!
-  begin -- state reset and transition
+  COIN : entity work.coin_detector
+    port map
+    (
+      moeda => moeda_sel,
+      moe   => moereg
+    );
+
+  sync_proc : process (CLK)
+  begin
     if (rising_edge(CLK)) then
       PS <= NS;
     end if;
   end process sync_proc;
 
-  comb_proc : process (Reset, SEL_P, SEL_M, SEL_D, Valida_moeda, Total, Vp, Timeout)
+  saida : process (PS)
+  begin
+    ini     <= '0';
+    prod    <= '0';
+    moeda   <= '0';
+    espera  <= '0';
+    valida  <= '0';
+    entrega <= '0';
+
+    case (PS) is
+      when Inicio          => ini     <= '1';
+      when Espera_produto  => prod    <= '1';
+      when Espera_moeda    => moeda   <= '1';
+      when Espera_outra    => espera  <= '1';
+      when Moeda_valida    => valida  <= '1';
+      when Entrega_produto => entrega <= '1';
+    end case;
+  end process;
+
+  comb_proc : process (PS, Reset, sel_p_btn,
+    sel_m_btn, SEL_D, Valida_moeda,
+    Total, Vp, Timeout)
   begin
     case PS is
       when Inicio =>
@@ -193,32 +267,30 @@ begin
         end if;
 
       when Espera_produto =>
-        if (SEL_P = '1') then
+        if (sel_p_btn = '1') then
           ns <= Espera_moeda;
         else
           ns <= Espera_produto;
         end if;
 
       when Espera_moeda =>
-        if (SEL_M = '1') then
+        if (sel_m_btn = '1') then
           NS <= Espera_outra;
-        elsif (not SEL_M = '1' and not SEL_D = '1') then
-          NS <= Espera_moeda;
-        elsif (not SEL_M = '1' and SEL_D = '1') then
+        else
           NS <= Espera_moeda;
         end if;
 
       when Espera_outra =>
-        if not Valida_moeda then
+        if Valida_moeda = FALSE then
           NS <= Espera_moeda;
         else
           NS <= Moeda_valida;
         end if;
 
       when Moeda_valida =>
-        if (SEL_M = '1' and Total < Vp) then
+        if (sel_m_btn = '1' and Total < Vp) then
           NS <= Moeda_valida;
-        elsif (SEL_M = '0' and Total < Vp) then
+        elsif (sel_m_btn = '0' and Total < Vp) then
           NS <= Espera_moeda;
         elsif (Total >= Vp) then
           NS <= Entrega_produto;
@@ -242,25 +314,10 @@ end comportamental;
 
 architecture comportamental of coin_detector is
 begin
-
-  moe(7) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '0') else
-  '0';
-  moe(6) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
-  '0';
-  moe(5) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
-  '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
-  '0';
-  moe(4) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
-  '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
-  '0';
-  moe(3) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
-  '0';
-  moe(2) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else
-  '0';
-  moe(1) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else
-  '0';
-  moe(0) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else
-  '0';
+  moe(3) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else '0';
+  moe(2) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else '0';
+  moe(1) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else '0';
+  moe(0) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else '0';
 end comportamental;
 
 architecture rtl of product_detector_ROM is
@@ -327,7 +384,7 @@ architecture rtl of product_detector_ROM is
 
   signal product       : std_logic_vector(2 downto 0);
   signal saida_produto : std_logic_vector(95 downto 0);
-  signal SEL_D         : std_logic := '0';
+  signal SEL_D_int     : std_logic := '0';
   signal address       : integer range 0 to 7;
 begin
 
@@ -337,12 +394,12 @@ begin
 
   saida_produto <= ROM(address);
 
-  SEL_D <= SW;
+  SEL_D_int <= SW;
 
-  process (SEL_D, saida_produto)
+  process (SEL_D_int, saida_produto)
 
   begin
-    if SEL_D = '0' then
+    if SEL_D_int = '0' then
       HEX5 <= saida_produto(95 downto 88);
       HEX4 <= saida_produto(87 downto 80);
       HEX3 <= saida_produto(79 downto 72);
@@ -365,7 +422,7 @@ architecture padrao of comparador is
 begin
   k : process (Total, Vp) is
   begin
-    if (unsigned(Vp)        <= unsigned(Total)) then
+    if (unsigned(Vp) <= unsigned(Total)) then
       Total_maior_ou_igual_Vp <= '1';
       Total_menor_que_Vp      <= '0';
     else
@@ -391,13 +448,11 @@ begin
 
   end process;
 end architecture;
-architecture Behavioral of DivisorClock is
 
-  --signal count : integer := 0;
+architecture Behavioral of DivisorClock is
   signal b : std_logic := '0';
 begin
 
-  -- Geração do Clock. Para um clock de 50MHz esse process gera um sinal de clock de 1Hz.
   process (clk50MHz, b)
     variable cnt : integer range 0 to 2 ** 26 - 1;
   begin
@@ -411,8 +466,8 @@ begin
         b <= not b;
         cnt := 0;
       end if;
-      clk1Hz <= b;
     end if;
+    clk1Hz <= b;
   end process;
 end;
 
