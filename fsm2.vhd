@@ -21,15 +21,8 @@ entity fsm2 is
     moeda   : out std_logic;
     espera  : out std_logic;
     valida  : out std_logic;
-    entrega : out std_logic;
+    entrega : out std_logic
 
-    -- Saídas para os displays de 7 segmentos da DE10-Lite
-    HEX0    : out std_logic_vector(7 downto 0);
-    HEX1    : out std_logic_vector(7 downto 0);
-    HEX2    : out std_logic_vector(7 downto 0);
-    HEX3    : out std_logic_vector(7 downto 0);
-    HEX4    : out std_logic_vector(7 downto 0);
-    HEX5    : out std_logic_vector(7 downto 0)
   );
 end fsm2;
 
@@ -62,12 +55,13 @@ entity product_detector_ROM is
     SW      : in std_logic;
     produto : in std_logic_vector(2 downto 0);
     LED     : out std_logic_vector(7 downto 0);
-    HEX0    : out std_logic_vector(7 downto 0);
-    HEX1    : out std_logic_vector(7 downto 0);
-    HEX2    : out std_logic_vector(7 downto 0);
-    HEX3    : out std_logic_vector(7 downto 0);
-    HEX4    : out std_logic_vector(7 downto 0);
-    HEX5    : out std_logic_vector(7 downto 0)
+
+    HEX0 : out std_logic_vector(7 downto 0);
+    HEX1 : out std_logic_vector(7 downto 0);
+    HEX2 : out std_logic_vector(7 downto 0);
+    HEX3 : out std_logic_vector(7 downto 0);
+    HEX4 : out std_logic_vector(7 downto 0);
+    HEX5 : out std_logic_vector(7 downto 0)
   );
 end entity;
 
@@ -149,6 +143,8 @@ architecture fsm of fsm2 is
   signal sel_p_btn : std_logic;
   signal sel_m_btn : std_logic;
 
+  signal ld_s_int : std_logic;
+
 begin
 
   -- Inversão para botões ativos em nível baixo (KEY0 e KEY1)
@@ -159,20 +155,24 @@ begin
   moeda_sel   <= SW(9 downto 7);
   produto_sel <= SW(6 downto 4);
 
+  -- Gera o preco (LED) internamente baseado na chave de produto
+  process(produto_sel)
+  begin
+    case produto_sel is
+      when "000" => LED <= std_logic_vector(to_unsigned(0, 8));
+      when "001" => LED <= std_logic_vector(to_unsigned(75, 8));
+      when "010" => LED <= std_logic_vector(to_unsigned(50, 8));
+      when "011" => LED <= std_logic_vector(to_unsigned(100, 8));
+      when "100" => LED <= std_logic_vector(to_unsigned(175, 8));
+      when "101" => LED <= std_logic_vector(to_unsigned(150, 8));
+      when "110" => LED <= std_logic_vector(to_unsigned(125, 8));
+      when others => LED <= std_logic_vector(to_unsigned(0, 8));
+    end case;
+  end process;
+
+  ld_s_int <= '1' when (PS = Espera_outra and Valida_moeda = true) else '0';
+
   -- Instanciação da ROM para decodificar o produto e os Displays HEX
-  ROM_INST : entity work.product_detector_ROM
-    port map
-    (
-      SW      => SEL_D,
-      produto => produto_sel,
-      LED     => LED,
-      HEX0    => HEX0,
-      HEX1    => HEX1,
-      HEX2    => HEX2,
-      HEX3    => HEX3,
-      HEX4    => HEX4,
-      HEX5    => HEX5
-    );
 
   CP : entity work.comparador
     port map
@@ -207,7 +207,7 @@ begin
     port map
     (
       Reset => Reset,
-      Load  => LD_S,
+      Load  => ld_s_int,
       Clock => clk,
       Ent   => s,
       Sai   => SOMADOR_B
@@ -245,18 +245,18 @@ begin
     entrega <= '0';
 
     case (PS) is
-      when Inicio          => ini     <= '1';
-      when Espera_produto  => prod    <= '1';
-      when Espera_moeda    => moeda   <= '1';
-      when Espera_outra    => espera  <= '1';
-      when Moeda_valida    => valida  <= '1';
+      when Inicio          => ini              <= '1';
+      when Espera_produto  => prod     <= '1';
+      when Espera_moeda    => moeda      <= '1';
+      when Espera_outra    => espera     <= '1';
+      when Moeda_valida    => valida     <= '1';
       when Entrega_produto => entrega <= '1';
     end case;
   end process;
 
   comb_proc : process (PS, Reset, sel_p_btn,
     sel_m_btn, SEL_D, Valida_moeda,
-    Total, Vp, Timeout)
+    ok, Timeout)
   begin
     case PS is
       when Inicio =>
@@ -288,11 +288,11 @@ begin
         end if;
 
       when Moeda_valida =>
-        if (sel_m_btn = '1' and Total < Vp) then
+        if (sel_m_btn = '1' and ok = '0') then
           NS <= Moeda_valida;
-        elsif (sel_m_btn = '0' and Total < Vp) then
+        elsif (sel_m_btn = '0' and ok = '0') then
           NS <= Espera_moeda;
-        elsif (Total >= Vp) then
+        elsif (ok = '1') then
           NS <= Entrega_produto;
         end if;
 
@@ -314,10 +314,18 @@ end comportamental;
 
 architecture comportamental of coin_detector is
 begin
-  moe(3) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else '0';
-  moe(2) <= '1' when (moeda(2) = '1' and moeda(1) = '0' and moeda(0) = '0') else '0';
-  moe(1) <= '1' when (moeda(2) = '0' and moeda(1) = '1' and moeda(0) = '0') else '0';
-  moe(0) <= '1' when (moeda(2) = '0' and moeda(1) = '0' and moeda(0) = '1') else '0';
+  process(moeda)
+  begin
+    if moeda = "001" then
+      moe <= std_logic_vector(to_unsigned(25, 8));
+    elsif moeda = "010" then
+      moe <= std_logic_vector(to_unsigned(50, 8));
+    elsif moeda = "100" then
+      moe <= std_logic_vector(to_unsigned(100, 8));
+    else
+      moe <= (others => '0');
+    end if;
+  end process;
 end comportamental;
 
 architecture rtl of product_detector_ROM is
@@ -422,7 +430,7 @@ architecture padrao of comparador is
 begin
   k : process (Total, Vp) is
   begin
-    if (unsigned(Vp) <= unsigned(Total)) then
+    if (unsigned(Vp)        <= unsigned(Total)) then
       Total_maior_ou_igual_Vp <= '1';
       Total_menor_que_Vp      <= '0';
     else
@@ -543,3 +551,102 @@ begin
   );
 
 end Behavioral;
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity fsm2_top is
+  port (
+    clk          : in std_logic;
+    Reset        : in std_logic;
+    SEL_D        : in std_logic;
+    SEL_P        : in std_logic;
+    SEL_M        : in std_logic;
+    Valida_moeda : in std_logic;
+    SW           : in std_logic_vector(9 downto 4);
+    
+    ini          : out std_logic;
+    prod         : out std_logic;
+    moeda        : out std_logic;
+    espera       : out std_logic;
+    valida       : out std_logic;
+    entrega      : out std_logic;
+    
+    HEX0         : out std_logic_vector(7 downto 0);
+    HEX1         : out std_logic_vector(7 downto 0);
+    HEX2         : out std_logic_vector(7 downto 0);
+    HEX3         : out std_logic_vector(7 downto 0);
+    HEX4         : out std_logic_vector(7 downto 0);
+    HEX5         : out std_logic_vector(7 downto 0)
+  );
+end entity;
+
+architecture rtl of fsm2_top is
+  signal timeout_sig : std_logic;
+  signal is_valid_coin : boolean;
+  signal fsm_valida : std_logic;
+  signal fsm_entrega : std_logic;
+  
+  -- Para mapear o SW original do fsm2 que tinha 10 bits
+  signal sw_full : std_logic_vector(9 downto 0);
+begin
+  -- Reconstrói SW completo para passar pro fsm2
+  sw_full(9 downto 4) <= SW;
+  sw_full(3) <= '0';
+  sw_full(2) <= Valida_moeda;
+  sw_full(1) <= SEL_D;
+  sw_full(0) <= Reset;
+
+  -- A logica de validacao de moeda (25, 50, 100)
+  is_valid_coin <= true when (SW(9 downto 7) = "001" or SW(9 downto 7) = "010" or SW(9 downto 7) = "100") else false;
+
+  FSM_INST : entity work.fsm2
+    port map (
+      clk          => clk,
+      Reset        => Reset,
+      SEL_D        => SEL_D,
+      SEL_M        => SEL_M,
+      SEL_P        => SEL_P,
+      LD_S         => '0',
+      Vp           => "000",
+      Total        => "000",
+      Timeout      => timeout_sig,
+      Valida_moeda => is_valid_coin,
+      SW           => sw_full,
+      ini          => ini,
+      prod         => prod,
+      moeda        => moeda,
+      espera       => espera,
+      valida       => fsm_valida,
+      entrega      => fsm_entrega
+    );
+
+  -- O led de moeda valida aceso mesmo sem apertar o botao
+  valida <= '1' when is_valid_coin else fsm_valida;
+  
+  entrega <= fsm_entrega;
+
+  ROM_INST : entity work.product_detector_ROM
+    port map (
+      SW      => SEL_D,
+      produto => SW(6 downto 4),
+      LED     => open,
+      HEX0    => HEX0,
+      HEX1    => HEX1,
+      HEX2    => HEX2,
+      HEX3    => HEX3,
+      HEX4    => HEX4,
+      HEX5    => HEX5
+    );
+
+  -- O timer precisa ser limpo quando a maquina nao estiver operando (Reset = '0' significa parada no Inicio)
+  TIMER_INST : entity work.clock5seg
+    port map (
+      Clock         => clk,
+      Clear         => not Reset,
+      Dispara_timer => fsm_entrega,
+      Timeout       => timeout_sig
+    );
+
+end architecture;
