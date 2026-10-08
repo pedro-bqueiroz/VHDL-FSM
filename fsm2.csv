@@ -11,12 +11,12 @@ SW[6],PIN_A13
 SW[7],PIN_A14
 SW[8],PIN_B14
 SW[9],PIN_F15
-ini,PIN_D13
-prod,PIN_C13
+ini,PIN_A8
+prod,PIN_A9
 moeda,PIN_A10
 espera,PIN_B10
-valida,PIN_A8
-entrega,PIN_A9
+valida,PIN_A11
+entrega,PIN_B11
 HEX0[0],PIN_C14
 HEX0[1],PIN_E15
 HEX0[2],PIN_C15
