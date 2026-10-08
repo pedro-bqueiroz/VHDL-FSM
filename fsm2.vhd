@@ -12,7 +12,7 @@ entity fsm2 is
     LD_S : in std_logic;
     Vp                : in unsigned(2 downto 0);
     Total             : in unsigned(2 downto 0);
-    Timeout           : in unsigned(2 downto 0);
+    Timeout           : in std_logic;
     Valida_moeda      : in boolean;
     ini               : out std_logic;
     prod              : out std_logic;
@@ -67,8 +67,8 @@ use ieee.numeric_std.all;
 
 entity comparador is
   port (
-    Total                   : in std_logic_vector(7 downto 0); -- apenas para esse arquivo
-    Vp                      : in std_logic_vector(7 downto 0);
+    Total                   : in std_logic_vector(2 downto 0); -- apenas para esse arquivo
+    Vp                      : in std_logic_vector(2 downto 0);
     Total_maior_ou_igual_Vp : out std_logic;
     Total_menor_que_Vp      : out std_logic
   );
@@ -138,7 +138,7 @@ begin
   port map (
     Vp => SOMADOR_C,
     Total => SOMADOR_B,
-    Total_maior_ou_igual_Vp => Entrega
+    Total_maior_ou_igual_Vp => entrega
   );
 
   REG_P : entity work.registrador
@@ -225,7 +225,7 @@ begin
         end if;
 
       when Entrega_produto =>
-        if (Timeout = 0) then
+        if (Timeout = '0') then
           NS <= Entrega_produto;
         else
           NS <= Inicio;
@@ -411,8 +411,8 @@ begin
         b <= not b;
         cnt := 0;
       end if;
+      clk1Hz <= b;
     end if;
-    clk1Hz <= b;
   end process;
 end;
 
