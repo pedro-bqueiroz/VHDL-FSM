@@ -139,7 +139,6 @@ architecture fsm of fsm2 is
 
   signal ok : std_logic;
 
-  -- Sinais invertidos para adaptar o acionamento em nível baixo dos botões KEY0 e KEY1
   signal sel_p_btn : std_logic;
   signal sel_m_btn : std_logic;
 
@@ -147,15 +146,12 @@ architecture fsm of fsm2 is
 
 begin
 
-  -- Inversão para botões ativos em nível baixo (KEY0 e KEY1)
   sel_p_btn <= not SEL_P;
   sel_m_btn <= not SEL_M;
 
-  -- Seleção de entradas a partir dos switches
   moeda_sel   <= SW(9 downto 7);
   produto_sel <= SW(6 downto 4);
 
-  -- Gera o preco (LED) internamente baseado na chave de produto
   process(produto_sel)
   begin
     case produto_sel is
@@ -171,8 +167,6 @@ begin
   end process;
 
   ld_s_int <= '1' when (PS = Espera_outra and Valida_moeda = true) else '0';
-
-  -- Instanciação da ROM para decodificar o produto e os Displays HEX
 
   CP : entity work.comparador
     port map
@@ -209,7 +203,7 @@ begin
       Reset => Reset,
       Load  => ld_s_int,
       Clock => clk,
-      Ent   => s,
+      Ent   => ent,
       Sai   => SOMADOR_B
     );
 
@@ -218,7 +212,7 @@ begin
     (
       a => SOMADOR_A,
       b => SOMADOR_B,
-      s => Ent
+      s => ent
     );
 
   COIN : entity work.coin_detector
@@ -565,14 +559,12 @@ entity fsm2_top is
     SEL_M        : in std_logic;
     Valida_moeda : in std_logic;
     SW           : in std_logic_vector(9 downto 4);
-    
     ini          : out std_logic;
     prod         : out std_logic;
     moeda        : out std_logic;
     espera       : out std_logic;
     valida       : out std_logic;
     entrega      : out std_logic;
-    
     HEX0         : out std_logic_vector(7 downto 0);
     HEX1         : out std_logic_vector(7 downto 0);
     HEX2         : out std_logic_vector(7 downto 0);
@@ -587,18 +579,16 @@ architecture rtl of fsm2_top is
   signal is_valid_coin : boolean;
   signal fsm_valida : std_logic;
   signal fsm_entrega : std_logic;
-  
-  -- Para mapear o SW original do fsm2 que tinha 10 bits
+
   signal sw_full : std_logic_vector(9 downto 0);
 begin
-  -- Reconstrói SW completo para passar pro fsm2
+
   sw_full(9 downto 4) <= SW;
   sw_full(3) <= '0';
   sw_full(2) <= Valida_moeda;
   sw_full(1) <= SEL_D;
   sw_full(0) <= Reset;
 
-  -- A logica de validacao de moeda (25, 50, 100)
   is_valid_coin <= true when (SW(9 downto 7) = "001" or SW(9 downto 7) = "010" or SW(9 downto 7) = "100") else false;
 
   FSM_INST : entity work.fsm2
@@ -622,9 +612,7 @@ begin
       entrega      => fsm_entrega
     );
 
-  -- O led de moeda valida aceso mesmo sem apertar o botao
   valida <= '1' when is_valid_coin else fsm_valida;
-  
   entrega <= fsm_entrega;
 
   ROM_INST : entity work.product_detector_ROM
@@ -640,11 +628,10 @@ begin
       HEX5    => HEX5
     );
 
-  -- O timer precisa ser limpo quando a maquina nao estiver operando (Reset = '0' significa parada no Inicio)
   TIMER_INST : entity work.clock5seg
     port map (
       Clock         => clk,
-      Clear         => not Reset,
+      Clear         => Reset,
       Dispara_timer => fsm_entrega,
       Timeout       => timeout_sig
     );
